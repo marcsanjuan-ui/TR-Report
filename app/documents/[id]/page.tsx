@@ -5,6 +5,7 @@ import { formatDateTime } from '@/lib/utils'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import StatusChanger from '@/components/ui/StatusChanger'
+import ReportGenerator from '@/components/ui/ReportGenerator'
 
 interface Props { params: Promise<{ id: string }> }
 
@@ -60,9 +61,12 @@ export default async function DocumentDetailPage({ params }: Props) {
         </div>
       </div>
 
+      {/* AI Report Generator */}
+      <ReportGenerator doc={doc} />
+
       {/* Photos */}
       {photos.length > 0 && (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden mt-6">
           <div className="px-5 py-3 border-b border-gray-100" style={{ background: '#f8f9fc' }}>
             <h2 className="text-xs font-bold text-gray-600 uppercase tracking-wider">Attachments ({photos.length})</h2>
           </div>
