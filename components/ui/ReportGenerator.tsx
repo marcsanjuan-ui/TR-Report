@@ -78,14 +78,19 @@ export default function ReportGenerator({ doc }: { doc: Document }) {
       const PW = 210, PH = 297
       const ML = 16, MR = 16, MT = 16, MB = 16
       const CW = PW - ML - MR
+      const CONTENT_TOP = 13 + MT   // below header bar
+      const CONTENT_BOT = PH - MB - 12  // above footer bar
 
       const photos = (doc.photos ?? []) as Array<{id:string;dataUrl:string;name:string;caption:string}>
       const imagePhotos = photos.filter(p => p.dataUrl?.startsWith('data:image'))
-      const totalPages = imagePhotos.length > 0 ? 2 : 1
 
-      // ── Sanitize for jsPDF latin fonts ───────────────────────────────
+      // Dynamic page counter — we don't know total pages upfront, use placeholder
+      let currentPage = 1
+      const pageNumPlaceholder: { page: number; x: number; y: number }[] = []
+
+      // ── Sanitize for jsPDF latin fonts ────────────────────────────────
       function sanitize(s: string): string {
-        return s
+        return (s ?? '')
           .replace(/₱/g, 'PHP ')
           .replace(/[$]/g, 'PHP ')
           .replace(/[\u2018\u2019]/g, "'")
@@ -95,9 +100,8 @@ export default function ReportGenerator({ doc }: { doc: Document }) {
           .replace(/[^\x00-\x7F]/g, '')
       }
 
-      // ── Helpers ─────────────────────────────────────────────────────
-
-      function drawPageFrame(pageNum: number) {
+      // ── Draw header/footer on current page ───────────────────────────
+      function drawPageFrame() {
         pdf.setFillColor(...C.navyDark)
         pdf.rect(0, 0, PW, 13, 'F')
         pdf.setFillColor(...C.navy)
@@ -114,12 +118,10 @@ export default function ReportGenerator({ doc }: { doc: Document }) {
         pdf.setTextColor(180, 200, 230)
         pdf.text('Makerlab Technical Department  -  Confidential', ML + 2, 9.5)
 
+        // Page badge — record position for later total-page fill-in
         pdf.setFillColor(...prefixAccent)
         pdf.roundedRect(PW - MR - 22, 2, 22, 9, 1.5, 1.5, 'F')
-        pdf.setFont('helvetica', 'bold')
-        pdf.setFontSize(6.5)
-        pdf.setTextColor(...C.white)
-        pdf.text(`Page ${pageNum} / ${totalPages}`, PW - MR - 11, 7.2, { align: 'center' })
+        pageNumPlaceholder.push({ page: currentPage, x: PW - MR - 11, y: 7.2 })
 
         pdf.setFillColor(...C.grayLight)
         pdf.rect(0, PH - 10, PW, 10, 'F')
@@ -137,7 +139,22 @@ export default function ReportGenerator({ doc }: { doc: Document }) {
         pdf.setTextColor(...C.text)
       }
 
+      // ── Add a new content page ────────────────────────────────────────
+      function newPage(): number {
+        pdf.addPage()
+        currentPage++
+        drawPageFrame()
+        return CONTENT_TOP
+      }
+
+      // ── Ensure enough vertical space; break page if needed ───────────
+      function ensureSpace(y: number, needed: number): number {
+        if (y + needed > CONTENT_BOT) return newPage()
+        return y
+      }
+
       function sectionHeading(label: string, y: number): number {
+        y = ensureSpace(y, 10)
         pdf.setFillColor(...C.navy)
         pdf.rect(ML, y, CW, 7, 'F')
         pdf.setFillColor(...prefixAccent)
@@ -150,110 +167,178 @@ export default function ReportGenerator({ doc }: { doc: Document }) {
         return y + 7 + 3
       }
 
+      // ── kvTable: wraps values, breaks across pages row-by-row ────────
       function kvTable(rows: [string, string][], y: number): number {
         const keyW = 58
         const valW = CW - keyW
-        const rowH = 6.5
-        rows.forEach(([k, v], i) => {
+        const lineH = 4.5
+        const padV  = 2.8
+        const minH  = 6.5
+
+        // Pre-compute wrapped lines per row
+        const wrappedRows = rows.map(([k, v]) => {
+          pdf.setFont('helvetica', 'normal')
+          pdf.setFontSize(7.5)
+          const lines: string[] = pdf.splitTextToSize(sanitize(v), valW - 8)
+          const rowH = Math.max(lines.length * lineH + padV * 2, minH)
+          return { k, lines, rowH }
+        })
+
+        wrappedRows.forEach(({ k, lines, rowH }, i) => {
+          // Page break before this row if it won't fit
+          y = ensureSpace(y, rowH)
+
           pdf.setFillColor(...(i % 2 === 0 ? C.white : C.rowAlt))
           pdf.rect(ML, y, CW, rowH, 'F')
-          // Key cell — shaded, label right-aligned inside it
+
           pdf.setFillColor(235, 239, 248)
           pdf.rect(ML, y, keyW, rowH, 'F')
+
           pdf.setFont('helvetica', 'bold')
           pdf.setFontSize(7)
           pdf.setTextColor(...C.navy)
-          pdf.text(sanitize(k), ML + keyW - 3, y + 4.3, { align: 'right' })
-          // Vertical divider between key and value
+          pdf.text(sanitize(k), ML + keyW - 3, y + rowH / 2 + 2.2, { align: 'right' })
+
           pdf.setDrawColor(...C.grayMid)
           pdf.setLineWidth(0.3)
           pdf.line(ML + keyW, y, ML + keyW, y + rowH)
-          // Value cell
+
           pdf.setFont('helvetica', 'normal')
           pdf.setFontSize(7.5)
           pdf.setTextColor(...C.text)
-          const vLines = pdf.splitTextToSize(sanitize(v), valW - 6)
-          pdf.text(vLines[0], ML + keyW + 4, y + 4.3)
-          // Bottom border
+          lines.forEach((line: string, li: number) => {
+            pdf.text(line, ML + keyW + 4, y + padV + lineH * li + lineH * 0.85)
+          })
+
           pdf.setDrawColor(...C.grayMid)
           pdf.setLineWidth(0.15)
           pdf.line(ML, y + rowH, ML + CW, y + rowH)
+
           y += rowH
         })
-        pdf.setDrawColor(...C.grayMid)
-        pdf.setLineWidth(0.3)
-        pdf.rect(ML, y - rows.length * rowH, CW, rows.length * rowH)
+
         return y + 4
       }
 
-      function proseParagraph(text: string, y: number, maxY: number): number {
-        pdf.setFillColor(...C.grayLight)
-        const lines = pdf.splitTextToSize(sanitize(text.trim()), CW - 8)
-        const blockH = Math.max(lines.length * 4.8 + 6, 14)
-        pdf.rect(ML, y, CW, blockH, 'F')
-        pdf.setDrawColor(...prefixAccent)
-        pdf.setLineWidth(0.6)
-        pdf.line(ML, y, ML, y + blockH)
-        pdf.setDrawColor(...C.grayMid)
-        pdf.setLineWidth(0.15)
-        pdf.rect(ML, y, CW, blockH)
+      // ── proseParagraph: splits across pages line by line ─────────────
+      function proseParagraph(text: string, y: number): number {
         pdf.setFont('helvetica', 'normal')
         pdf.setFontSize(8)
-        pdf.setTextColor(...C.text)
-        let ty = y + 5
-        for (const ln of lines) {
-          if (ty + 4.8 > maxY) break
-          pdf.text(ln, ML + 5, ty)
-          ty += 4.8
+        const lines = pdf.splitTextToSize(sanitize(text.trim()), CW - 10)
+        if (!lines.length) return y
+
+        const lineH = 4.8
+        const padTop = 4
+        const padBot = 4
+
+        // Draw the block background before writing — must fit at least first line
+        // We'll draw line-by-line with page breaks, using a left accent bar per chunk
+        let chunkStart = 0
+
+        while (chunkStart < lines.length) {
+          // Collect lines that fit on this page
+          const availH = CONTENT_BOT - y
+          const maxLinesOnPage = Math.max(1, Math.floor((availH - padTop - padBot) / lineH))
+          const chunk = lines.slice(chunkStart, chunkStart + maxLinesOnPage)
+          const blockH = chunk.length * lineH + padTop + padBot
+
+          pdf.setFillColor(...C.grayLight)
+          pdf.rect(ML, y, CW, blockH, 'F')
+          pdf.setDrawColor(...prefixAccent)
+          pdf.setLineWidth(0.6)
+          pdf.line(ML, y, ML, y + blockH)
+          pdf.setDrawColor(...C.grayMid)
+          pdf.setLineWidth(0.15)
+          pdf.rect(ML, y, CW, blockH)
+
+          pdf.setTextColor(...C.text)
+          chunk.forEach((ln: string, li: number) => {
+            pdf.text(ln, ML + 5, y + padTop + lineH * li + lineH * 0.75)
+          })
+
+          y += blockH + 3
+          chunkStart += chunk.length
+
+          if (chunkStart < lines.length) {
+            y = newPage()
+          }
         }
-        return y + blockH + 4
+
+        return y + 1
       }
 
-      function bomTable(rows: string[][], y: number, maxY: number): number {
+      // ── bomTable: dynamic row height, page-break aware ───────────────
+      function bomTable(rows: string[][], y: number): number {
         const cols = ['#', 'SKU', 'Description', 'Qty', 'Unit', 'Unit Cost']
         const colW = [8, 22, CW - 8 - 22 - 14 - 16 - 20, 14, 16, 20]
-        const rowH = 6.5
+        const lineH = 4.5
+        const padV  = 2.8
+        const minH  = 6.5
         const headerH = 7
 
-        pdf.setFillColor(...C.blue)
-        pdf.rect(ML, y, CW, headerH, 'F')
-        pdf.setFont('helvetica', 'bold')
-        pdf.setFontSize(6.8)
-        pdf.setTextColor(...C.white)
-        let cx = ML + 2
-        cols.forEach((c, i) => {
-          pdf.text(c, cx, y + 4.8)
-          cx += colW[i]
-        })
+        // Helper to draw the BOM header row (repeated on page break)
+        function drawBomHeader(hy: number) {
+          pdf.setFillColor(...C.blue)
+          pdf.rect(ML, hy, CW, headerH, 'F')
+          pdf.setFont('helvetica', 'bold')
+          pdf.setFontSize(6.8)
+          pdf.setTextColor(...C.white)
+          let cx = ML + 2
+          cols.forEach((c, i) => {
+            pdf.text(c, cx, hy + 4.8)
+            cx += colW[i]
+          })
+        }
 
+        y = ensureSpace(y, headerH + minH)
+        drawBomHeader(y)
         y += headerH
+
         rows.forEach((row, ri) => {
-          if (y + rowH > maxY) return
+          // Pre-compute row height
+          let maxLines = 1
+          row.forEach((cell, ci) => {
+            pdf.setFont('helvetica', 'normal')
+            pdf.setFontSize(7.2)
+            const wrapped: string[] = pdf.splitTextToSize(sanitize(String(cell ?? '')), colW[ci] - 3)
+            if (wrapped.length > maxLines) maxLines = wrapped.length
+          })
+          const isTotalRow = ri === rows.length - 1 && row[0] === ''
+          const rowH = isTotalRow ? minH : Math.max(maxLines * lineH + padV * 2, minH)
+
+          // Page break — redraw header on new page
+          if (y + rowH > CONTENT_BOT) {
+            y = newPage()
+            drawBomHeader(y)
+            y += headerH
+          }
+
           pdf.setFillColor(...(ri % 2 === 0 ? C.white : C.rowAlt))
           pdf.rect(ML, y, CW, rowH, 'F')
-          const isTotalRow = ri === rows.length - 1 && row[0] === ''
+
           pdf.setFont('helvetica', isTotalRow ? 'bold' : 'normal')
           pdf.setFontSize(7.2)
-          const tcol = isTotalRow ? C.navy : C.text
-          pdf.setTextColor(...tcol)
+          pdf.setTextColor(...(isTotalRow ? C.navy : C.text))
+
           let dx = ML + 2
           row.forEach((cell, ci) => {
-            const txt = pdf.splitTextToSize(sanitize(String(cell ?? '')), colW[ci] - 2)
-            pdf.text(txt[0] ?? '', dx, y + 4.3)
+            const wrapped: string[] = pdf.splitTextToSize(sanitize(String(cell ?? '')), colW[ci] - 3)
+            wrapped.forEach((line: string, li: number) => {
+              pdf.text(line, dx, y + padV + lineH * li + lineH * 0.85)
+            })
             dx += colW[ci]
           })
+
           pdf.setDrawColor(...C.grayMid)
           pdf.setLineWidth(0.15)
           pdf.line(ML, y + rowH, ML + CW, y + rowH)
           y += rowH
         })
-        pdf.setDrawColor(...C.blue)
-        pdf.setLineWidth(0.3)
-        pdf.rect(ML, y - rows.length * rowH - headerH, CW, rows.length * rowH + headerH)
+
         return y + 5
       }
 
-      // ── Parse report text ────────────────────────────────────────────
+      // ── Parse report text ─────────────────────────────────────────────
       type Section = { title: string; lines: string[] }
 
       function parseReport(raw: string): Section[] {
@@ -310,14 +395,12 @@ export default function ReportGenerator({ doc }: { doc: Document }) {
       const sections = parseReport(cleanReport)
       const headerMeta = parseHeaderMeta(cleanReport)
 
-      // ──────────────────────────────────────────────────────────────────
-      // PAGE 1 — Styled report
-      // ──────────────────────────────────────────────────────────────────
-      drawPageFrame(1)
+      // ── PAGE 1 — Draw frame + title block ────────────────────────────
+      drawPageFrame()
 
-      let y = MT + 4
+      let y = CONTENT_TOP - MB + 4  // just below header bar
 
-      // Title block
+      // Status + prefix colours
       const statusColor: [number,number,number] =
         doc.status === 'approved' ? C.green :
         doc.status === 'submitted' ? C.blue :
@@ -329,7 +412,7 @@ export default function ReportGenerator({ doc }: { doc: Document }) {
 
       const rightX = ML + CW
 
-      // Right side: doc type badge + control number on same row
+      // Doc type badge
       pdf.setFillColor(...prefixPale)
       pdf.roundedRect(rightX - 20, y, 20, 6, 1.5, 1.5, 'F')
       pdf.setFont('helvetica', 'bold')
@@ -337,23 +420,24 @@ export default function ReportGenerator({ doc }: { doc: Document }) {
       pdf.setTextColor(...prefixAccent)
       pdf.text(doc.doc_type, rightX - 10, y + 4.1, { align: 'center' })
 
+      // Control number
       pdf.setFont('courier', 'bold')
       pdf.setFontSize(7.5)
       pdf.setTextColor(...C.blue)
-      pdf.text(doc.control_number, rightX, y + 4.1 + 6, { align: 'right' })
+      pdf.text(doc.control_number, rightX, y + 10.5, { align: 'right' })
 
       // Left accent bar
       pdf.setFillColor(...prefixAccent)
       pdf.rect(ML, y, 3, 24, 'F')
 
-      // Left: big title
+      // Title
       pdf.setFont('helvetica', 'bold')
       pdf.setFontSize(18)
       pdf.setTextColor(...C.navy)
       const titleLines = pdf.splitTextToSize(sanitize(doc.title || 'Untitled Document'), CW * 0.65)
       pdf.text(titleLines, ML + 6, y + 7)
 
-      // Left: status badge directly below title
+      // Status badge
       const titleBlockH = titleLines.length * 7 + 2
       pdf.setFillColor(...statusPale)
       pdf.roundedRect(ML + 6, y + titleBlockH + 1, 22, 5.5, 1.2, 1.2, 'F')
@@ -364,16 +448,14 @@ export default function ReportGenerator({ doc }: { doc: Document }) {
 
       y += titleBlockH + 14
 
-      const maxY = PH - MB - 12
-
+      // ── Render document meta header ───────────────────────────────────
       if (headerMeta.length > 0) {
         y = sectionHeading('Document Information', y)
         y = kvTable(headerMeta, y)
       }
 
+      // ── Render report sections ────────────────────────────────────────
       for (const sec of sections) {
-        if (y + 20 > maxY) break
-
         const isBom = /bill of materials|parts.*costs/i.test(sec.title)
         const isKV  = !isBom && sec.lines.some(l => /^.{3,30}\s{2,}:\s+/.test(l))
 
@@ -382,10 +464,10 @@ export default function ReportGenerator({ doc }: { doc: Document }) {
         if (isBom) {
           const tableRows = parseBOM(sec.lines)
           if (tableRows.length > 0) {
-            y = bomTable(tableRows, y, maxY) ?? y
+            y = bomTable(tableRows, y)
           } else {
             const noMat = sec.lines.filter(l => l.trim() && !/^[-=]{3,}/.test(l)).join(' ').trim()
-            y = proseParagraph(noMat || 'No materials listed.', y, maxY)
+            y = proseParagraph(noMat || 'No materials listed.', y)
           }
         } else if (isKV) {
           const kvRows = parseKV(sec.lines)
@@ -395,22 +477,17 @@ export default function ReportGenerator({ doc }: { doc: Document }) {
             const m2 = l.match(/^(.+?)\s*:\s+(.+)$/)
             return !m1 && !m2 && l.trim() && !/^[-=]{3,}/.test(l)
           }).join(' ')
-          if (prose.trim()) y = proseParagraph(prose, y, maxY)
+          if (prose.trim()) y = proseParagraph(prose, y)
         } else {
           const prose = sec.lines.filter(l => l.trim() && !/^[-=]{3,}/.test(l)).join(' ')
-          if (prose.trim()) y = proseParagraph(prose, y, maxY)
+          if (prose.trim()) y = proseParagraph(prose, y)
         }
       }
 
-      // ──────────────────────────────────────────────────────────────────
-      // PAGE 2 — Photos
-      // ──────────────────────────────────────────────────────────────────
+      // ── Photos section ────────────────────────────────────────────────
       if (imagePhotos.length > 0) {
-        pdf.addPage()
-        drawPageFrame(2)
-
-        let py = MT + 4
-        py = sectionHeading(`Attachments  (${imagePhotos.length} photo${imagePhotos.length > 1 ? 's' : ''})`, py)
+        y = newPage()
+        y = sectionHeading(`Attachments  (${imagePhotos.length} photo${imagePhotos.length > 1 ? 's' : ''})`, y)
 
         const cols = imagePhotos.length === 1 ? 1 : 2
         const gutter = 5
@@ -420,12 +497,14 @@ export default function ReportGenerator({ doc }: { doc: Document }) {
 
         imagePhotos.forEach((ph, idx) => {
           const col = idx % cols
-          const row = Math.floor(idx / cols)
+          // New page when a left-column image won't fit
+          if (col === 0) {
+            y = ensureSpace(y, imgH + capH + 5)
+          }
           const x = cols === 1 ? ML + (CW - imgW) / 2 : ML + col * (imgW + gutter)
-          const baseY = py + row * (imgH + capH + 5)
+          const baseY = y
 
-          if (baseY + imgH + capH > PH - MB - 12) return
-
+          // Advance y only after completing a full row
           pdf.setFillColor(200, 205, 215)
           pdf.rect(x + 0.8, baseY + 0.8, imgW, imgH, 'F')
 
@@ -471,8 +550,26 @@ export default function ReportGenerator({ doc }: { doc: Document }) {
             const capT = pdf.splitTextToSize(sanitize(ph.caption), imgW - 4)
             pdf.text(capT[0], x + 2, baseY + imgH + 8.2)
           }
+
+          // Advance y after right column (or single column)
+          if (cols === 1 || col === cols - 1 || idx === imagePhotos.length - 1) {
+            y += imgH + capH + 5
+          }
         })
       }
+
+      // ── Back-fill page numbers now that we know the total ─────────────
+      const totalPages = currentPage
+      pageNumPlaceholder.forEach(({ page, x, y: py }) => {
+        pdf.setPage(page)
+        // Re-paint the badge background so old text is covered
+        pdf.setFillColor(...prefixAccent)
+        pdf.roundedRect(PW - MR - 22, 2, 22, 9, 1.5, 1.5, 'F')
+        pdf.setFont('helvetica', 'bold')
+        pdf.setFontSize(6.5)
+        pdf.setTextColor(...C.white)
+        pdf.text(`Page ${page} / ${totalPages}`, x, py, { align: 'center' })
+      })
 
       const filename = `${doc.control_number}_${doc.doc_type}_Report.pdf`.replace(/[^a-zA-Z0-9_.-]/g, '_')
       pdf.save(filename)
