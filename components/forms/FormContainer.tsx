@@ -61,12 +61,15 @@ export default function FormContainer({ type }: Props) {
       const titleKey = getTitleKey(type)
       const title = (formData[titleKey] as string) || controlNumber
 
+      const creatorName = localStorage.getItem('creator_name') ?? undefined
+
       const doc = await createDocument({
         type,
         controlNumber,
         title,
         formData,
         photos,
+        creatorName,
       })
 
       // Update status if submitting

@@ -3,6 +3,7 @@ import type { Metadata } from 'next'
 import { IBM_Plex_Sans, IBM_Plex_Mono } from 'next/font/google'
 import './globals.css'
 import ThemeProvider from '@/components/layout/ThemeProvider'
+import NameGuard from '@/components/layout/NameGuard'
 
 const ibmSans = IBM_Plex_Sans({
   variable: '--font-sans',
@@ -26,7 +27,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="en" className={`${ibmSans.variable} ${ibmMono.variable} h-full`} suppressHydrationWarning>
       <body className="min-h-full antialiased">
         <ThemeProvider>
-          {children}
+          <NameGuard>
+            {children}
+          </NameGuard>
         </ThemeProvider>
       </body>
     </html>
