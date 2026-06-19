@@ -1,9 +1,10 @@
+// FILE: app/documents/[id]/page.tsx
 import { fetchDocument } from '@/lib/actions'
 import { notFound } from 'next/navigation'
-import { DOC_META, STATUS_COLORS } from '@/types/documents'
+import { DOC_META } from '@/types/documents'
 import { formatDateTime } from '@/lib/utils'
 import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Calendar, Hash } from 'lucide-react'
 import StatusChanger from '@/components/ui/StatusChanger'
 import ReportGenerator from '@/components/ui/ReportGenerator'
 
@@ -18,71 +19,88 @@ export default async function DocumentDetailPage({ params }: Props) {
   const photos = doc.photos ?? []
   const data = doc.form_data ?? {}
 
+  const prefixClass = doc.doc_prefix === 'TR' ? 'pill-tr' : doc.doc_prefix === 'TA' ? 'pill-ta' : 'pill-as'
+
   return (
-    <div className="p-8 max-w-4xl mx-auto">
-      {/* Back + header */}
-      <div className="mb-6">
-        <Link href="/documents" className="flex items-center gap-1 text-xs text-gray-500 hover:text-blue-600 mb-4 transition-colors">
-          <ArrowLeft size={12} /> Back to Documents
-        </Link>
-        <div className="flex items-start justify-between">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span
-                className="text-[10px] font-bold font-mono px-2 py-0.5 rounded"
-                style={{
-                  background: doc.doc_prefix === 'TR' ? '#e8f0fe' : doc.doc_prefix === 'TA' ? '#fff3cd' : '#fde8e8',
-                  color: doc.doc_prefix === 'TR' ? '#1a56c4' : doc.doc_prefix === 'TA' ? '#856404' : '#a02f22'
-                }}
-              >
+    <div className="p-8 max-w-4xl mx-auto fade-up">
+      {/* Back */}
+      <Link
+        href="/documents"
+        className="inline-flex items-center gap-1.5 text-xs font-medium mb-6 back-link"
+      >
+        <ArrowLeft size={12} /> Back to Documents
+      </Link>
+
+      {/* Header card */}
+      <div className="card p-6 mb-6">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            {/* Badges row */}
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
+              <span className={`text-[10px] font-bold font-mono px-2 py-0.5 rounded ${prefixClass}`}>
                 {doc.doc_type}
               </span>
-              <span className="font-mono text-sm text-blue-700 font-bold">{doc.control_number}</span>
+              <span className="flex items-center gap-1 font-mono text-xs font-bold" style={{ color: 'var(--brand-blue)' }}>
+                <Hash size={10} />
+                {doc.control_number}
+              </span>
+              <span className={`badge badge-${doc.status}`}>{doc.status}</span>
             </div>
-            <h1 className="text-xl font-bold text-[#1f3864]">{doc.title || 'Untitled Document'}</h1>
-            <p className="text-sm text-gray-500 mt-0.5">{meta?.name} · Updated {formatDateTime(doc.updated_at)}</p>
+
+            {/* Title */}
+            <h1 className="text-2xl font-bold leading-tight mb-2" style={{ color: 'var(--text-primary)' }}>
+              {doc.title || 'Untitled Document'}
+            </h1>
+
+            {/* Meta row */}
+            <div className="flex items-center gap-4 flex-wrap">
+              <span className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+                <span className="font-medium">{meta?.name}</span>
+              </span>
+              <span className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--text-muted)' }}>
+                <Calendar size={11} />
+                Updated {formatDateTime(doc.updated_at)}
+              </span>
+            </div>
           </div>
-          <div className="flex items-center gap-3">
+
+          {/* Status changer */}
+          <div className="flex-shrink-0">
             <StatusChanger docId={doc.id} currentStatus={doc.status} />
-            <span className={`text-xs font-semibold px-2.5 py-1 rounded-full ${STATUS_COLORS[doc.status as keyof typeof STATUS_COLORS] ?? ''}`}>
-              {doc.status}
-            </span>
           </div>
         </div>
       </div>
 
-      {/* Form data display */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden mb-6">
-        <div className="px-5 py-3 border-b border-gray-100" style={{ background: '#f8f9fc' }}>
-          <h2 className="text-xs font-bold text-gray-600 uppercase tracking-wider">Document Data</h2>
-        </div>
-        <div className="p-5">
+      {/* Form data */}
+      <div className="card overflow-hidden mb-6">
+        <div className="card-header"><h2>Document Data</h2></div>
+        <div className="p-6">
           <DataGrid data={data} />
         </div>
       </div>
 
-      {/* AI Report Generator */}
+      {/* AI Report */}
       <ReportGenerator doc={doc} />
 
       {/* Photos */}
       {photos.length > 0 && (
-        <div className="bg-white rounded-lg border border-gray-200 overflow-hidden mt-6">
-          <div className="px-5 py-3 border-b border-gray-100" style={{ background: '#f8f9fc' }}>
-            <h2 className="text-xs font-bold text-gray-600 uppercase tracking-wider">Attachments ({photos.length})</h2>
+        <div className="card overflow-hidden mt-6">
+          <div className="card-header">
+            <h2>Attachments ({photos.length})</h2>
           </div>
           <div className="p-5 grid grid-cols-4 gap-3">
             {(photos as Array<{ id: string; dataUrl: string; name: string; caption: string }>).map((ph, i) => {
               const isImg = ph.dataUrl?.startsWith('data:image')
               return (
-                <div key={ph.id ?? i} className="border border-gray-200 rounded overflow-hidden">
-                  <div className="aspect-[4/3] bg-gray-100 flex items-center justify-center overflow-hidden">
+                <div key={ph.id ?? i} className="rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
+                  <div className="aspect-[4/3] flex items-center justify-center overflow-hidden" style={{ background: 'var(--bg-subtle)' }}>
                     {isImg
                       ? <img src={ph.dataUrl} alt={ph.name} className="w-full h-full object-cover" />
                       : <div className="text-3xl">📄</div>}
                   </div>
-                  <div className="p-2">
-                    <p className="text-[9px] text-gray-400 truncate">{ph.name}</p>
-                    {ph.caption && <p className="text-[10px] text-gray-600 mt-0.5">{ph.caption}</p>}
+                  <div className="p-2.5">
+                    <p className="text-[10px] font-medium truncate" style={{ color: 'var(--text-secondary)' }}>{ph.name}</p>
+                    {ph.caption && <p className="text-[10px] mt-0.5" style={{ color: 'var(--text-muted)' }}>{ph.caption}</p>}
                   </div>
                 </div>
               )
@@ -101,33 +119,37 @@ function DataGrid({ data }: { data: Record<string, unknown> }) {
     return true
   })
 
-  if (entries.length === 0) return <p className="text-sm text-gray-400 italic">No form data recorded.</p>
+  if (entries.length === 0) return (
+    <p className="text-sm italic" style={{ color: 'var(--text-muted)' }}>No form data recorded.</p>
+  )
 
   return (
-    <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+    <div className="grid grid-cols-2 gap-x-8 gap-y-4">
       {entries.map(([key, val]) => {
-        const label = key.replace(/^[a-z]+_/, '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+        const label = key.replace(/^[a-z]+_/, '').replace(/_/g, ' ').replace(/\w/g, c => c.toUpperCase())
         const isComplex = typeof val === 'object'
 
         if (isComplex) {
           return (
-            <div key={key} className="col-span-2 border-b border-gray-50 pb-2">
-              <dt className="text-xs font-semibold text-gray-500 mb-1">{label}</dt>
+            <div key={key} className="col-span-2 pb-3" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+              <dt className="text-[10px] font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>{label}</dt>
               <dd>
                 {Array.isArray(val) ? (
-                  <ul className="text-xs text-gray-700 space-y-0.5">
+                  <ul className="space-y-1">
                     {(val as unknown[]).map((v, i) => (
-                      <li key={i} className="flex items-start gap-1.5">
-                        <span className="text-blue-400 mt-0.5">•</span>
+                      <li key={i} className="flex items-start gap-2 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                        <span style={{ color: 'var(--brand-blue)' }} className="mt-0.5">•</span>
                         {typeof v === 'object' && v !== null
-                          ? <pre className="text-xs text-gray-600 bg-gray-50 p-1 rounded overflow-x-auto">{JSON.stringify(v, null, 2)}</pre>
+                          ? <pre className="text-xs p-2 rounded overflow-x-auto" style={{ background: 'var(--bg-subtle)', color: 'var(--text-secondary)' }}>{JSON.stringify(v, null, 2)}</pre>
                           : String(v)
                         }
                       </li>
                     ))}
                   </ul>
                 ) : (
-                  <pre className="text-xs text-gray-600 bg-gray-50 p-2 rounded overflow-x-auto">{JSON.stringify(val, null, 2)}</pre>
+                  <pre className="text-xs p-3 rounded overflow-x-auto" style={{ background: 'var(--bg-subtle)', color: 'var(--text-secondary)' }}>
+                    {JSON.stringify(val, null, 2)}
+                  </pre>
                 )}
               </dd>
             </div>
@@ -135,9 +157,9 @@ function DataGrid({ data }: { data: Record<string, unknown> }) {
         }
 
         return (
-          <div key={key} className="border-b border-gray-50 pb-2">
-            <dt className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-0.5">{label}</dt>
-            <dd className="text-sm text-gray-800">{String(val)}</dd>
+          <div key={key} className="pb-3" style={{ borderBottom: '1px solid var(--border-subtle)' }}>
+            <dt className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: 'var(--text-muted)' }}>{label}</dt>
+            <dd className="text-sm" style={{ color: 'var(--text-primary)' }}>{String(val)}</dd>
           </div>
         )
       })}

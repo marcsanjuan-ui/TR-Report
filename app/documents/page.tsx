@@ -1,3 +1,4 @@
+// FILE: app/documents/page.tsx
 import { fetchDocuments } from '@/lib/actions'
 import { DOC_META, STATUS_COLORS, DocType, DocPrefix } from '@/types/documents'
 import { formatDateTime } from '@/lib/utils'
@@ -6,72 +7,49 @@ import { Search, PlusCircle, FileText } from 'lucide-react'
 import DeleteDocButton from '@/components/ui/DeleteDocButton'
 
 interface Props {
-  searchParams: Promise<{
-    type?: string
-    prefix?: string
-    status?: string
-    q?: string
-  }>
+  searchParams: Promise<{ type?: string; prefix?: string; status?: string; q?: string }>
 }
 
 type DocumentRow = {
-  id: string
-  control_number: string
-  doc_prefix: DocPrefix | string
-  doc_type: DocType | string
-  title?: string | null
-  status: string
-  updated_at: string
+  id: string; control_number: string; doc_prefix: DocPrefix | string
+  doc_type: DocType | string; title?: string | null; status: string; updated_at: string
 }
 
 export default async function DocumentsPage({ searchParams }: Props) {
   const sp = await searchParams
-
-  const docs = (await fetchDocuments({
-    type: sp.type as DocType | undefined,
-    status: sp.status,
-    search: sp.q,
-    limit: 50,
-  })) as DocumentRow[]
-
-  const prefixFilter = sp.prefix
-
-  const filtered: DocumentRow[] = prefixFilter
-    ? docs.filter((doc: DocumentRow) => doc.doc_prefix === prefixFilter)
-    : docs
+  const docs = (await fetchDocuments({ type: sp.type as DocType | undefined, status: sp.status, search: sp.q, limit: 50 })) as DocumentRow[]
+  const filtered = sp.prefix ? docs.filter(d => d.doc_prefix === sp.prefix) : docs
 
   return (
-    <div className="p-8 max-w-5xl mx-auto">
+    <div className="p-8 max-w-5xl mx-auto fade-up">
       {/* Header */}
+      {/* Back to Dashboard */}
+      <Link href="/dashboard" className="back-link inline-flex items-center gap-1.5 text-xs font-medium mb-6">
+        ← Back to Dashboard
+      </Link>
+
       <div className="flex items-start justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold text-[#1f3864] tracking-wide uppercase">
-            All Documents
-          </h1>
-          <p className="text-sm text-gray-500 mt-0.5">
+          <p className="text-xs font-semibold uppercase tracking-widest mb-1" style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
+            Documents
+          </p>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>All Documents</h1>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--text-muted)' }}>
             {filtered.length} document{filtered.length !== 1 ? 's' : ''} found
           </p>
         </div>
-
-        <Link
-          href="/new"
-          className="flex items-center gap-2 px-4 py-2 rounded text-sm font-semibold text-white"
-          style={{ background: '#2e5490' }}
-        >
+        <Link href="/new" className="btn-primary">
           <PlusCircle size={15} />
           New Document
         </Link>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg border border-gray-200 p-4 mb-5 flex flex-wrap gap-3 items-center">
+      <div className="card p-4 mb-5 flex flex-wrap gap-3 items-center">
         {/* Search */}
         <form className="flex items-center gap-2 flex-1 min-w-48">
           <div className="relative flex-1">
-            <Search
-              size={13}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-            />
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-muted)' }} />
             <input
               name="q"
               defaultValue={sp.q}
@@ -79,183 +57,117 @@ export default async function DocumentsPage({ searchParams }: Props) {
               className="field-input pl-8 text-xs"
             />
           </div>
-
-          <button
-            type="submit"
-            className="px-3 py-1.5 text-xs font-semibold rounded text-white"
-            style={{ background: '#2e5490' }}
-          >
-            Search
-          </button>
+          <button type="submit" className="btn-primary text-xs px-3 py-2">Search</button>
         </form>
 
-        {/* Prefix filter */}
-        <div className="flex gap-1">
-          {(['', 'TR', 'TA', 'AS'] as const).map((p) => (
-            <Link
-              key={p}
-              href={p ? `/documents?prefix=${p}` : '/documents'}
-              className={`px-3 py-1.5 text-xs font-bold rounded transition-colors ${
-                prefixFilter === p || (!prefixFilter && !p)
-                  ? 'text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-              style={
-                prefixFilter === p || (!prefixFilter && !p)
-                  ? { background: '#2e5490' }
-                  : {}
-              }
-            >
-              {p || 'All'}
-            </Link>
-          ))}
+        {/* Prefix pills */}
+        <div className="flex gap-1.5">
+          {(['', 'TR', 'TA', 'AS'] as const).map(p => {
+            const active = sp.prefix === p || (!sp.prefix && !p)
+            return (
+              <Link
+                key={p}
+                href={p ? `/documents?prefix=${p}` : '/documents'}
+                className="px-3 py-1.5 text-xs font-bold rounded-lg transition-all"
+                style={{
+                  background: active ? 'var(--brand-blue)' : 'var(--bg-subtle)',
+                  color: active ? '#fff' : 'var(--text-secondary)',
+                  border: '1px solid',
+                  borderColor: active ? 'var(--brand-blue)' : 'var(--border)',
+                }}
+              >
+                {p || 'All'}
+              </Link>
+            )
+          })}
         </div>
 
-        {/* Status filter */}
-        <div className="flex gap-1">
+        {/* Status pills */}
+        <div className="flex gap-1.5">
           {[
-            { key: '', label: 'All Status' },
+            { key: '', label: 'All' },
             { key: 'draft', label: 'Draft' },
             { key: 'submitted', label: 'Submitted' },
             { key: 'approved', label: 'Approved' },
-          ].map((s) => (
-            <Link
-              key={s.key}
-              href={`/documents?${s.key ? `status=${s.key}` : ''}${
-                sp.prefix ? `&prefix=${sp.prefix}` : ''
-              }`}
-              className={`px-2.5 py-1 text-xs font-semibold rounded transition-colors ${
-                sp.status === s.key || (!sp.status && !s.key)
-                  ? 'text-white'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-              }`}
-              style={
-                sp.status === s.key || (!sp.status && !s.key)
-                  ? { background: '#d4870a' }
-                  : {}
-              }
-            >
-              {s.label}
-            </Link>
-          ))}
+          ].map(s => {
+            const active = sp.status === s.key || (!sp.status && !s.key)
+            return (
+              <Link
+                key={s.key}
+                href={`/documents?${s.key ? `status=${s.key}` : ''}${sp.prefix ? `&prefix=${sp.prefix}` : ''}`}
+                className="px-3 py-1.5 text-xs font-semibold rounded-lg transition-all"
+                style={{
+                  background: active ? '#d4870a' : 'var(--bg-subtle)',
+                  color: active ? '#fff' : 'var(--text-secondary)',
+                  border: '1px solid',
+                  borderColor: active ? '#d4870a' : 'var(--border)',
+                }}
+              >
+                {s.label}
+              </Link>
+            )
+          })}
         </div>
       </div>
 
       {/* Table */}
-      <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+      <div className="card overflow-hidden">
         {filtered.length === 0 ? (
           <div className="py-16 text-center">
-            <FileText size={32} className="mx-auto text-gray-300 mb-3" />
-            <p className="text-sm text-gray-400">No documents found.</p>
-            <Link
-              href="/new"
-              className="text-sm text-blue-500 hover:underline mt-1 inline-block"
-            >
+            <FileText size={36} className="mx-auto mb-3" style={{ color: 'var(--border)' }} />
+            <p className="text-sm" style={{ color: 'var(--text-muted)' }}>No documents found.</p>
+            <Link href="/new" className="text-sm hover:underline mt-1 inline-block" style={{ color: 'var(--brand-blue)' }}>
               Create one →
             </Link>
           </div>
         ) : (
-          <table className="w-full text-sm">
+          <table className="data-table">
             <thead>
-              <tr
-                className="border-b border-gray-100"
-                style={{ background: '#f8f9fc' }}
-              >
-                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  Control #
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  Type
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  Title
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  Updated
-                </th>
-                <th className="px-5 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
+              <tr>
+                <th>Control #</th>
+                <th>Type</th>
+                <th>Title</th>
+                <th>Status</th>
+                <th>Updated</th>
+                <th></th>
               </tr>
             </thead>
-
             <tbody>
-              {filtered.map((doc: DocumentRow) => (
-                <tr
-                  key={doc.id}
-                  className="border-b border-gray-50 hover:bg-blue-50/40 transition-colors group"
-                >
-                  <td className="px-5 py-3">
+              {filtered.map(doc => (
+                <tr key={doc.id} className="group">
+                  <td>
                     <Link
                       href={`/documents/${doc.id}`}
-                      className="font-mono text-xs text-blue-600 hover:underline"
+                      className="font-mono text-xs font-semibold hover:underline"
+                      style={{ color: 'var(--brand-blue)' }}
                     >
                       {doc.control_number}
                     </Link>
                   </td>
-
-                  <td className="px-3 py-3">
+                  <td>
                     <div className="flex flex-col gap-0.5">
-                      <span
-                        className="text-[10px] font-bold font-mono px-1.5 py-0.5 rounded w-fit"
-                        style={{
-                          background:
-                            doc.doc_prefix === 'TR'
-                              ? '#e8f0fe'
-                              : doc.doc_prefix === 'TA'
-                                ? '#fff3cd'
-                                : '#fde8e8',
-                          color:
-                            doc.doc_prefix === 'TR'
-                              ? '#1a56c4'
-                              : doc.doc_prefix === 'TA'
-                                ? '#856404'
-                                : '#a02f22',
-                        }}
-                      >
+                      <span className={`text-[10px] font-bold font-mono px-1.5 py-0.5 rounded w-fit ${doc.doc_prefix === 'TR' ? 'pill-tr' : doc.doc_prefix === 'TA' ? 'pill-ta' : 'pill-as'}`}>
                         {doc.doc_type}
                       </span>
-
-                      <span className="text-[10px] text-gray-400">
+                      <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>
                         {DOC_META[doc.doc_type as DocType]?.name}
                       </span>
                     </div>
                   </td>
-
-                  <td className="px-3 py-3 text-xs text-gray-700 max-w-[200px] truncate">
-                    {doc.title || (
-                      <span className="text-gray-300 italic">Untitled</span>
-                    )}
-                  </td>
-
-                  <td className="px-3 py-3">
-                    <span
-                      className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                        STATUS_COLORS[
-                          doc.status as keyof typeof STATUS_COLORS
-                        ] ?? 'bg-gray-100 text-gray-600'
-                      }`}
-                    >
-                      {doc.status}
+                  <td className="max-w-[200px]">
+                    <span className="truncate block text-xs" style={{ color: 'var(--text-primary)' }}>
+                      {doc.title || <span style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Untitled</span>}
                     </span>
                   </td>
-
-                  <td className="px-3 py-3 text-xs text-gray-400 font-mono">
+                  <td><span className={`badge badge-${doc.status}`}>{doc.status}</span></td>
+                  <td className="font-mono text-xs" style={{ color: 'var(--text-muted)' }}>
                     {formatDateTime(doc.updated_at)}
                   </td>
-
-                  <td className="px-5 py-3">
-                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Link
-                        href={`/documents/${doc.id}`}
-                        className="text-xs text-blue-600 hover:underline"
-                      >
+                  <td>
+                    <div className="flex items-center gap-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Link href={`/documents/${doc.id}`} className="text-xs font-medium hover:underline" style={{ color: 'var(--brand-blue)' }}>
                         View
                       </Link>
-
                       <DeleteDocButton id={doc.id} />
                     </div>
                   </td>

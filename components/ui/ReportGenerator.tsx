@@ -1,3 +1,4 @@
+// FILE: components/ui/ReportGenerator.tsx
 'use client'
 
 import { useState } from 'react'
@@ -510,66 +511,57 @@ export default function ReportGenerator({ doc }: { doc: Document }) {
   }
 
   return (
-    <div className="bg-white rounded-lg border border-gray-200 overflow-hidden mb-6">
-      <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between" style={{ background: '#f8f9fc' }}>
-        <h2 className="text-xs font-bold text-gray-600 uppercase tracking-wider">AI Report</h2>
-        <div className="flex items-center gap-2">
+    <div className="card overflow-hidden mb-6">
+      <div className="card-header">
+        <h2>AI Report</h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           {report && (
             <>
-              <button
-                onClick={copy}
-                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
-              >
-                {copied ? <Check size={12} className="text-green-500" /> : <Copy size={12} />}
+              <button onClick={copy} className="btn-outline" style={{ fontSize: 12, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: 5 }}>
+                {copied ? <Check size={12} /> : <Copy size={12} />}
                 {copied ? 'Copied' : 'Copy'}
               </button>
               <button
                 onClick={downloadPdf}
                 disabled={downloading}
-                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded border transition-colors"
-                style={{
-                  borderColor: downloading ? '#c8d8f0' : '#2e5490',
-                  color: downloading ? '#7a9bd4' : '#2e5490',
-                  background: 'white',
-                }}
+                className="btn-outline"
+                style={{ fontSize: 12, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: 5, opacity: downloading ? 0.6 : 1 }}
               >
-                {downloading
-                  ? <><Loader2 size={12} className="animate-spin" /> Exporting…</>
-                  : <><Download size={12} /> Download PDF</>
-                }
+                {downloading ? <Loader2 size={12} className="spin" /> : <Download size={12} />}
+                {downloading ? 'Exporting…' : 'Download PDF'}
               </button>
             </>
           )}
           <button
             onClick={generate}
             disabled={loading}
-            className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded text-white font-semibold transition-colors"
-            style={{ background: loading ? '#7a9bd4' : '#2e5490' }}
+            className="btn-primary"
+            style={{ fontSize: 12, padding: '4px 12px', opacity: loading ? 0.7 : 1 }}
           >
-            {loading
-              ? <><Loader2 size={12} className="animate-spin" /> Generating…</>
-              : <><FileText size={12} /> {report ? 'Regenerate' : 'Generate Report'}</>
-            }
+            {loading ? <Loader2 size={12} className="spin" /> : <FileText size={12} />}
+            {loading ? 'Generating…' : report ? 'Regenerate' : 'Generate Report'}
           </button>
         </div>
       </div>
 
-      <div className="p-5">
+      <div style={{ padding: 20 }}>
         {error && (
-          <div className="text-xs px-3 py-2 rounded mb-3" style={{ background: '#fde8e8', color: '#c8392b', border: '1px solid #f5c6c2' }}>
+          <div style={{ fontSize: 12, padding: '8px 12px', borderRadius: 6, marginBottom: 12, background: 'var(--status-draft-bg)', color: 'var(--status-draft-text)', border: '1px solid var(--status-draft-border)' }}>
             {error}
           </div>
         )}
         {!report && !loading && !error && (
-          <p className="text-sm text-gray-400 italic">Click "Generate Report" to create a formal report using Ollama (llama3.2). Make sure Ollama is running locally.</p>
+          <p style={{ fontSize: 13, fontStyle: 'italic', color: 'var(--text-muted)' }}>
+            Click "Generate Report" to create a formal report using Ollama (llama3.2). Make sure Ollama is running locally.
+          </p>
         )}
         {loading && (
-          <div className="flex items-center gap-2 text-sm text-gray-400">
-            <Loader2 size={14} className="animate-spin" /> Generating report…
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-muted)' }}>
+            <Loader2 size={14} className="spin" /> Generating report…
           </div>
         )}
         {report && (
-          <pre className="text-xs text-gray-700 whitespace-pre-wrap font-mono leading-relaxed">{report}</pre>
+          <pre style={{ fontSize: 12, whiteSpace: 'pre-wrap', lineHeight: 1.6, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', margin: 0 }}>{report}</pre>
         )}
       </div>
     </div>
