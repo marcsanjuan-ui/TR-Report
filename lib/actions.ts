@@ -24,10 +24,9 @@ export async function createDocument(params: {
   title: string
   formData: Record<string, unknown>
   photos: unknown[]
+  creatorName?: string
 }) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('Not authenticated')
 
   const prefix = getPrefix(params.type)
 
@@ -40,7 +39,7 @@ export async function createDocument(params: {
       title: params.title,
       form_data: params.formData,
       photos: params.photos,
-      created_by: user.id,
+      created_by: params.creatorName ?? 'Unknown',
       status: 'draft',
     })
     .select()

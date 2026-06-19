@@ -2,14 +2,12 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
 import { useTheme } from './ThemeProvider'
 import {
   LayoutDashboard, FileText, PlusCircle, LogOut,
-  ChevronRight, Sun, Moon,
+  ChevronRight, Sun, Moon, User,
 } from 'lucide-react'
-
-interface Props { userEmail: string }
+import { useEffect, useState } from 'react'
 
 const NAV = [
   { href: '/dashboard',  label: 'Dashboard',     icon: LayoutDashboard },
@@ -23,14 +21,18 @@ const FILTERS = [
   { label: 'AS — After Sales',    href: '/documents?prefix=AS', color: '#c8392b' },
 ]
 
-export default function Sidebar({ userEmail }: Props) {
+export default function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
-  const supabase = createClient()
   const { theme, toggle } = useTheme()
+  const [creatorName, setCreatorName] = useState('')
 
-  async function signOut() {
-    await supabase.auth.signOut()
+  useEffect(() => {
+    setCreatorName(localStorage.getItem('creator_name') ?? '')
+  }, [])
+
+  function signOut() {
+    localStorage.removeItem('creator_name')
     router.push('/login')
     router.refresh()
   }
@@ -151,11 +153,11 @@ export default function Sidebar({ userEmail }: Props) {
               className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0"
               style={{ background: 'rgba(46,84,144,0.6)', color: '#a0bce8' }}
             >
-              {userEmail[0]?.toUpperCase()}
+              {creatorName ? creatorName[0].toUpperCase() : <User size={10} />}
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-medium text-white truncate">{userEmail}</p>
-              <p className="text-[10px]" style={{ color: '#4f6490', fontFamily: 'var(--font-mono)' }}>Staff</p>
+              <p className="text-xs font-medium text-white truncate">{creatorName || 'Unknown'}</p>
+              <p className="text-[10px]" style={{ color: '#4f6490', fontFamily: 'var(--font-mono)' }}>Report Creator</p>
             </div>
           </div>
         </div>
@@ -169,7 +171,7 @@ export default function Sidebar({ userEmail }: Props) {
           onMouseLeave={e => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = '#8fa3cc' }}
         >
           <LogOut size={13} />
-          Sign Out
+          Change Name
         </button>
       </div>
     </aside>
