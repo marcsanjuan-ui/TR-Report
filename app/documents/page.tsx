@@ -3,22 +3,50 @@ import { fetchDocuments } from '@/lib/actions'
 import { DOC_META, STATUS_COLORS, DocType, DocPrefix } from '@/types/documents'
 import { formatDateTime } from '@/lib/utils'
 import Link from 'next/link'
-import { Search, PlusCircle, FileText } from 'lucide-react'
+import { Search, PlusCircle, FileText, ChevronLeft, ChevronRight } from 'lucide-react'
 import DeleteDocButton from '@/components/ui/DeleteDocButton'
 
+const PAGE_SIZE = 25
+
 interface Props {
-  searchParams: Promise<{ type?: string; prefix?: string; status?: string; q?: string }>
+  searchParams: Promise<{ type?: string; prefix?: string; status?: string; q?: string; page?: string }>
 }
 
 type DocumentRow = {
   id: string; control_number: string; doc_prefix: DocPrefix | string
   doc_type: DocType | string; title?: string | null; status: string; updated_at: string
+  created_by?: string
 }
 
 export default async function DocumentsPage({ searchParams }: Props) {
   const sp = await searchParams
-  const docs = (await fetchDocuments({ type: sp.type as DocType | undefined, status: sp.status, search: sp.q, limit: 50 })) as DocumentRow[]
-  const filtered = sp.prefix ? docs.filter(d => d.doc_prefix === sp.prefix) : docs
+  const page   = Math.max(1, parseInt(sp.page ?? '1', 10))
+  const offset = (page - 1) * PAGE_SIZE
+
+  // Fetch one extra to detect if there's a next page
+  const docs = (await fetchDocuments({
+    type: sp.type as DocType | undefined,
+    status: sp.status,
+    search: sp.q,
+    limit: PAGE_SIZE + 1,
+    offset,
+  })) as DocumentRow[]
+
+  const hasNext = docs.length > PAGE_SIZE
+  const filtered = (sp.prefix
+    ? docs.filter(d => d.doc_prefix === sp.prefix)
+    : docs
+  ).slice(0, PAGE_SIZE)
+
+  function pageUrl(p: number) {
+    const params = new URLSearchParams()
+    if (sp.prefix) params.set('prefix', sp.prefix)
+    if (sp.status) params.set('status', sp.status)
+    if (sp.q)      params.set('q', sp.q)
+    if (p > 1)     params.set('page', String(p))
+    const qs = params.toString()
+    return `/documents${qs ? `?${qs}` : ''}`
+  }
 
   return (
     <div className="p-8 max-w-5xl mx-auto fade-up">
@@ -177,6 +205,27 @@ export default async function DocumentsPage({ searchParams }: Props) {
           </table>
         )}
       </div>
+
+      {/* Pagination */}
+      {(page > 1 || hasNext) && (
+        <div className="flex items-center justify-between mt-4">
+          <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+            Page {page} · showing {filtered.length} document{filtered.length !== 1 ? 's' : ''}
+          </p>
+          <div className="flex gap-2">
+            {page > 1 && (
+              <Link href={pageUrl(page - 1)} className="btn-outline flex items-center gap-1 text-xs px-3 py-1.5">
+                <ChevronLeft size={12} /> Previous
+              </Link>
+            )}
+            {hasNext && (
+              <Link href={pageUrl(page + 1)} className="btn-outline flex items-center gap-1 text-xs px-3 py-1.5">
+                Next <ChevronRight size={12} />
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

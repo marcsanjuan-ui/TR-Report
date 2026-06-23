@@ -90,7 +90,7 @@ export async function fetchDocuments(params?: {
 
   let query = supabase
     .from('documents')
-    .select('id, control_number, doc_type, doc_prefix, title, status, created_at, updated_at, created_by')
+    .select('id, control_number, doc_type, doc_prefix, title, status, created_at, updated_at, created_by, photos')
     .order('created_at', { ascending: false })
 
   if (params?.type) query = query.eq('doc_type', params.type)

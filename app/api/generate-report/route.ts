@@ -1,15 +1,30 @@
 import { NextResponse } from 'next/server'
 import { DOC_META, DocType } from '@/types/documents'
 
+const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL ?? 'http://localhost:11434'
+const OLLAMA_MODEL    = process.env.OLLAMA_MODEL    ?? 'llama3.2'
+const OLLAMA_TIMEOUT  = parseInt(process.env.OLLAMA_TIMEOUT_MS ?? '120000', 10)
+
 export async function POST(request: Request) {
   const { doc } = await request.json()
-  const meta = DOC_META[doc.doc_type as DocType]
+  const meta   = DOC_META[doc.doc_type as DocType]
   const prefix = doc.doc_prefix as 'TR' | 'TA' | 'AS'
 
   const date = new Date(doc.created_at).toLocaleDateString('en-PH', {
-    year: 'numeric', month: 'long', day: 'numeric'
+    year: 'numeric', month: 'long', day: 'numeric',
   })
 
+  // ── Photo context for the prompt ──────────────────────────────────────────
+  type PhotoRecord = { id: string; name: string; caption: string; ctx: string; dataUrl: string }
+  const photos = (doc.photos ?? []) as PhotoRecord[]
+  const photoContext = photos.length > 0
+    ? `\nATTACHMENTS (${photos.length} file${photos.length > 1 ? 's' : ''}):\n` +
+      photos.map((p, i) =>
+        `  [${i + 1}] ${p.name}${p.caption ? ` — "${p.caption}"` : ''}${p.ctx ? ` (context: ${p.ctx})` : ''}`
+      ).join('\n')
+    : ''
+
+  // ── Templates ─────────────────────────────────────────────────────────────
   const trTemplate = `
 JASSEN HARRIS INDUSTRIES CORPORATION
 Technical Department — Makerlab
@@ -143,38 +158,58 @@ ${'═'.repeat(60)}`
 
   const prompt = `You are a formal document writer for Jassen Harris Industries Corporation (JHIC / Makerlab).
 
-Fill in the following report template using ONLY the data provided below. 
+Fill in the following report template using ONLY the data provided below.
 Follow the template EXACTLY — do not add, remove, or reorder sections.
 Do not use markdown, asterisks, or any symbols not already in the template.
 Use ASCII tables exactly as shown in the template for any tabular data.
 Replace all placeholder instructions in parentheses with actual content derived from the form data.
-Calculate totals for BOM tables by multiplying qty × cost per row.
+Calculate totals for BOM tables by multiplying qty x cost per row.
+If attachments are listed below, reference them by name in the relevant section.
 
 TEMPLATE:
 ${template}
 
 FORM DATA:
-${JSON.stringify(doc.form_data, null, 2)}`
+${JSON.stringify(doc.form_data, null, 2)}${photoContext}`
+
+  // ── Fetch with timeout ────────────────────────────────────────────────────
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), OLLAMA_TIMEOUT)
 
   try {
-    const response = await fetch('http://localhost:11434/api/chat', {
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
       body: JSON.stringify({
-        model: 'llama3.2',
-        messages: [{ role: 'user', content: prompt }],
+        model: OLLAMA_MODEL,
+        prompt,
         stream: false,
       }),
     })
 
-    if (!response.ok) throw new Error('Ollama not reachable')
+    clearTimeout(timer)
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => '')
+      throw new Error(`Ollama returned ${response.status}${text ? `: ${text}` : ''}`)
+    }
 
     const data = await response.json()
-    return NextResponse.json({ report: data.message.content })
-  } catch {
-    return NextResponse.json(
-      { error: 'Ollama is not running. Start it with: ollama serve' },
-      { status: 503 }
-    )
+    return NextResponse.json({ report: data.response })
+
+  } catch (err: unknown) {
+    clearTimeout(timer)
+
+    const isAbort  = err instanceof Error && err.name === 'AbortError'
+    const isConn   = err instanceof TypeError && err.message.includes('fetch')
+
+    const message = isAbort
+      ? `Request timed out after ${OLLAMA_TIMEOUT / 1000}s. Try a faster model or increase OLLAMA_TIMEOUT_MS.`
+      : isConn
+      ? `Could not reach Ollama at ${OLLAMA_BASE_URL}. Make sure it is running: ollama serve`
+      : err instanceof Error ? err.message : 'Unknown error'
+
+    return NextResponse.json({ error: message }, { status: 503 })
   }
 }

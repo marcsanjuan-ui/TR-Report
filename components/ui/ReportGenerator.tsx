@@ -1,35 +1,85 @@
 // FILE: components/ui/ReportGenerator.tsx
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { Document } from '@/types/documents'
-import { FileText, Loader2, Copy, Check, Download } from 'lucide-react'
+import { FileText, Loader2, Copy, Check, Download, RefreshCw } from 'lucide-react'
 
 export default function ReportGenerator({ doc }: { doc: Document }) {
-  const [report, setReport] = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [copied, setCopied] = useState(false)
+  const [report, setReport]       = useState('')
+  const [loading, setLoading]     = useState(false)
+  const [streaming, setStreaming] = useState(false)
+  const [error, setError]         = useState('')
+  const [copied, setCopied]       = useState(false)
   const [downloading, setDownloading] = useState(false)
+  const abortRef = useRef<AbortController | null>(null)
 
   async function generate() {
+    // Cancel any in-flight request
+    abortRef.current?.abort()
+    const controller = new AbortController()
+    abortRef.current = controller
+
     setLoading(true)
+    setStreaming(false)
     setError('')
     setReport('')
+
     try {
       const res = await fetch('/api/generate-report', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({ doc }),
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error)
-      setReport(data.report.replace(/₱/g, 'PHP ').replace(/\$/g, 'PHP '))
+
+      if (!res.ok) {
+        const data = await res.json()
+        throw new Error(data.error ?? `Server error ${res.status}`)
+      }
+
+      // Stream the response token-by-token from the readable body
+      const reader = res.body?.getReader()
+      if (!reader) throw new Error('No response body')
+
+      setLoading(false)
+      setStreaming(true)
+
+      const decoder = new TextDecoder()
+      let buffer = ''
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+
+        // The API returns a single JSON object — accumulate and parse when complete
+        try {
+          const parsed = JSON.parse(buffer)
+          if (parsed.error) throw new Error(parsed.error)
+          const text = (parsed.report as string)
+            .replace(/₱/g, 'PHP ')
+            .replace(/\$/g, 'PHP ')
+          setReport(text)
+          buffer = ''
+        } catch {
+          // Partial JSON — keep accumulating
+        }
+      }
+
     } catch (e: unknown) {
+      if (e instanceof Error && e.name === 'AbortError') return
       setError(e instanceof Error ? e.message : 'Failed to generate report')
     } finally {
       setLoading(false)
+      setStreaming(false)
     }
+  }
+
+  function cancel() {
+    abortRef.current?.abort()
+    setLoading(false)
+    setStreaming(false)
   }
 
   async function copy() {
@@ -84,7 +134,6 @@ export default function ReportGenerator({ doc }: { doc: Document }) {
       const imagePhotos = photos.filter(p => p.dataUrl?.startsWith('data:image'))
       const totalPages = imagePhotos.length > 0 ? 2 : 1
 
-      // ── Sanitize for jsPDF latin fonts ───────────────────────────────
       function sanitize(s: string): string {
         return s
           .replace(/₱/g, 'PHP ')
@@ -95,8 +144,6 @@ export default function ReportGenerator({ doc }: { doc: Document }) {
           .replace(/[\u2500-\u257F\u2550-\u256C\u2580-\u259F]/g, '')
           .replace(/[^\x00-\x7F]/g, '')
       }
-
-      // ── Helpers ─────────────────────────────────────────────────────
 
       function drawPageFrame(pageNum: number) {
         pdf.setFillColor(...C.navyDark)
@@ -157,54 +204,39 @@ export default function ReportGenerator({ doc }: { doc: Document }) {
         const lineH = 4.5
         const padV = 4
 
-        // Filter out literal "FIELD NAME / value" header artifacts
         const filteredRows = rows.filter(([k, v]) =>
           !(k.trim().toUpperCase() === 'FIELD NAME' && v.trim().toLowerCase() === 'value')
         )
 
         const startY = y
         filteredRows.forEach(([k, v], i) => {
-          // Calculate dynamic row height based on value text wrapping
           pdf.setFontSize(7.5)
           const vLines = pdf.splitTextToSize(sanitize(v), valW - 8)
           const rowH = Math.max(vLines.length * lineH + padV * 2, 8)
 
-          // Row backgrounds
           pdf.setFillColor(...(i % 2 === 0 ? C.white : C.rowAlt))
           pdf.rect(ML, y, CW, rowH, 'F')
-
-          // Key cell — shaded
           pdf.setFillColor(235, 239, 248)
           pdf.rect(ML, y, keyW, rowH, 'F')
-
-          // Vertical divider
           pdf.setDrawColor(...prefixAccent)
           pdf.setLineWidth(0.4)
           pdf.line(ML + keyW, y, ML + keyW, y + rowH)
-
-          // Key label — right-aligned, vertically centred
           pdf.setFont('helvetica', 'bold')
           pdf.setFontSize(7)
           pdf.setTextColor(...C.navy)
           pdf.text(sanitize(k), ML + keyW - 4, y + rowH / 2 + 2.2, { align: 'right' })
-
-          // Value text — left-aligned, wraps
           pdf.setFont('helvetica', 'normal')
           pdf.setFontSize(7.5)
           pdf.setTextColor(...C.text)
           vLines.forEach((line: string, li: number) => {
             pdf.text(line, ML + keyW + 4, y + padV + 3 + li * lineH)
           })
-
-          // Bottom border
           pdf.setDrawColor(...C.grayMid)
           pdf.setLineWidth(0.15)
           pdf.line(ML, y + rowH, ML + CW, y + rowH)
-
           y += rowH
         })
 
-        // Outer border
         pdf.setDrawColor(...C.grayMid)
         pdf.setLineWidth(0.3)
         pdf.rect(ML, startY, CW, y - startY)
@@ -278,7 +310,6 @@ export default function ReportGenerator({ doc }: { doc: Document }) {
         return y + 5
       }
 
-      // ── Parse report text ────────────────────────────────────────────
       type Section = { title: string; lines: string[] }
 
       function parseReport(raw: string): Section[] {
@@ -335,14 +366,10 @@ export default function ReportGenerator({ doc }: { doc: Document }) {
       const sections = parseReport(cleanReport)
       const headerMeta = parseHeaderMeta(cleanReport)
 
-      // ──────────────────────────────────────────────────────────────────
-      // PAGE 1 — Styled report
-      // ──────────────────────────────────────────────────────────────────
       drawPageFrame(1)
 
       let y = MT + 4
 
-      // Title block
       const statusColor: [number,number,number] =
         doc.status === 'approved' ? C.green :
         doc.status === 'submitted' ? C.blue :
@@ -354,7 +381,6 @@ export default function ReportGenerator({ doc }: { doc: Document }) {
 
       const rightX = ML + CW
 
-      // Right side: doc type badge + control number on same row
       pdf.setFillColor(...prefixPale)
       pdf.roundedRect(rightX - 20, y, 20, 6, 1.5, 1.5, 'F')
       pdf.setFont('helvetica', 'bold')
@@ -367,18 +393,15 @@ export default function ReportGenerator({ doc }: { doc: Document }) {
       pdf.setTextColor(...C.blue)
       pdf.text(doc.control_number, rightX, y + 4.1 + 6, { align: 'right' })
 
-      // Left accent bar
       pdf.setFillColor(...prefixAccent)
       pdf.rect(ML, y, 3, 24, 'F')
 
-      // Left: big title
       pdf.setFont('helvetica', 'bold')
       pdf.setFontSize(18)
       pdf.setTextColor(...C.navy)
       const titleLines = pdf.splitTextToSize(sanitize(doc.title || 'Untitled Document'), CW * 0.65)
       pdf.text(titleLines, ML + 6, y + 7)
 
-      // Left: status badge directly below title
       const titleBlockH = titleLines.length * 7 + 2
       pdf.setFillColor(...statusPale)
       pdf.roundedRect(ML + 6, y + titleBlockH + 1, 22, 5.5, 1.2, 1.2, 'F')
@@ -427,9 +450,6 @@ export default function ReportGenerator({ doc }: { doc: Document }) {
         }
       }
 
-      // ──────────────────────────────────────────────────────────────────
-      // PAGE 2 — Photos
-      // ──────────────────────────────────────────────────────────────────
       if (imagePhotos.length > 0) {
         pdf.addPage()
         drawPageFrame(2)
@@ -510,12 +530,19 @@ export default function ReportGenerator({ doc }: { doc: Document }) {
     }
   }
 
+  const isActive = loading || streaming
+
   return (
     <div className="card overflow-hidden mb-6">
       <div className="card-header">
-        <h2>AI Report</h2>
+        <div>
+          <h2>AI Report</h2>
+          <p style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 1 }}>
+            Powered by Ollama · model: <code style={{ fontFamily: 'var(--font-mono)' }}>{process.env.NEXT_PUBLIC_OLLAMA_MODEL ?? 'llama3.2'}</code>
+          </p>
+        </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {report && (
+          {report && !isActive && (
             <>
               <button onClick={copy} className="btn-outline" style={{ fontSize: 12, padding: '4px 10px', display: 'flex', alignItems: 'center', gap: 5 }}>
                 {copied ? <Check size={12} /> : <Copy size={12} />}
@@ -532,36 +559,48 @@ export default function ReportGenerator({ doc }: { doc: Document }) {
               </button>
             </>
           )}
-          <button
-            onClick={generate}
-            disabled={loading}
-            className="btn-primary"
-            style={{ fontSize: 12, padding: '4px 12px', opacity: loading ? 0.7 : 1 }}
-          >
-            {loading ? <Loader2 size={12} className="spin" /> : <FileText size={12} />}
-            {loading ? 'Generating…' : report ? 'Regenerate' : 'Generate Report'}
-          </button>
+          {isActive ? (
+            <button
+              onClick={cancel}
+              className="btn-outline"
+              style={{ fontSize: 12, padding: '4px 12px', display: 'flex', alignItems: 'center', gap: 5, color: 'var(--status-draft-text)' }}
+            >
+              Cancel
+            </button>
+          ) : (
+            <button
+              onClick={generate}
+              className="btn-primary"
+              style={{ fontSize: 12, padding: '4px 12px', display: 'flex', alignItems: 'center', gap: 5 }}
+            >
+              {report ? <RefreshCw size={12} /> : <FileText size={12} />}
+              {report ? 'Regenerate' : 'Generate Report'}
+            </button>
+          )}
         </div>
       </div>
 
       <div style={{ padding: 20 }}>
         {error && (
           <div style={{ fontSize: 12, padding: '8px 12px', borderRadius: 6, marginBottom: 12, background: 'var(--status-draft-bg)', color: 'var(--status-draft-text)', border: '1px solid var(--status-draft-border)' }}>
-            {error}
+            ⚠ {error}
           </div>
         )}
-        {!report && !loading && !error && (
+        {!report && !isActive && !error && (
           <p style={{ fontSize: 13, fontStyle: 'italic', color: 'var(--text-muted)' }}>
-            Click "Generate Report" to create a formal report using Ollama (llama3.2). Make sure Ollama is running locally.
+            Click "Generate Report" to create a formal report. Make sure Ollama is running: <code style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>ollama serve</code>
           </p>
         )}
-        {loading && (
+        {isActive && !report && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: 'var(--text-muted)' }}>
-            <Loader2 size={14} className="spin" /> Generating report…
+            <Loader2 size={14} className="spin" /> Waiting for Ollama…
           </div>
         )}
         {report && (
-          <pre style={{ fontSize: 12, whiteSpace: 'pre-wrap', lineHeight: 1.6, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', margin: 0 }}>{report}</pre>
+          <pre style={{ fontSize: 12, whiteSpace: 'pre-wrap', lineHeight: 1.6, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)', margin: 0 }}>
+            {report}
+            {streaming && <span className="spin" style={{ display: 'inline-block', marginLeft: 4 }}>▋</span>}
+          </pre>
         )}
       </div>
     </div>
