@@ -112,3 +112,23 @@ begin
     alter table documents alter column created_by type text using null;
   end if;
 end $$;
+
+-- ─── Drop lingering RLS policies before altering created_by ───────────────
+drop policy if exists "Users can update own documents" on documents;
+drop policy if exists "Users can delete own documents" on documents;
+drop policy if exists "Users can insert documents" on documents;
+drop policy if exists "Users can view all documents" on documents;
+
+-- Drop ALL policies on documents dynamically (catches any name)
+do $$
+declare pol record;
+begin
+  for pol in select policyname from pg_policies where tablename = 'documents'
+  loop
+    execute format('drop policy if exists %I on documents', pol.policyname);
+  end loop;
+end $$;
+
+alter table documents drop constraint if exists documents_created_by_fkey;
+alter table documents alter column created_by type text using null;
+alter table documents disable row level security;
