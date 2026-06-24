@@ -14,7 +14,7 @@ create table if not exists documents (
   status text default 'draft',   -- draft, submitted, approved, archived
   form_data jsonb default '{}',
   photos jsonb default '[]',
-  created_by text,               -- name of the report creator
+  created_by text,               -- plain name entered by user (no auth)
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
@@ -96,3 +96,19 @@ end $$;
 alter table documents alter column created_by type text using created_by::text;
 alter table documents disable row level security;
 alter table doc_sequences disable row level security;
+
+-- ─── Fix created_by: drop auth FK, change to plain text ───────────────────
+-- Run this if your live DB still has created_by as uuid linked to auth.users
+alter table documents drop constraint if exists documents_created_by_fkey;
+alter table documents drop constraint if exists documents_created_by_profiles_fkey;
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_name = 'documents'
+      and column_name = 'created_by'
+      and udt_name = 'uuid'
+  ) then
+    alter table documents alter column created_by type text using null;
+  end if;
+end $$;
