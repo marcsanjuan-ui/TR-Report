@@ -59,6 +59,20 @@ $$;
 -- ─── Migration: fix existing tables if already created ───
 alter table documents drop constraint if exists documents_created_by_fkey;
 
+-- Fix created_by column type if it was previously uuid
+do $$
+begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_name = 'documents'
+      and column_name = 'created_by'
+      and data_type = 'uuid'
+  ) then
+    alter table documents alter column created_by type text using null;
+  end if;
+end $$;
+
+
 do $$
 declare
   pol record;

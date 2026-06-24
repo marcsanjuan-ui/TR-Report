@@ -39,7 +39,7 @@ export async function createDocument(params: {
       title: params.title,
       form_data: params.formData,
       photos: params.photos,
-      created_by: params.creatorName ?? 'Unknown',
+      created_by: String(params.creatorName ?? 'Unknown').slice(0, 100),
       status: 'draft',
     })
     .select()
