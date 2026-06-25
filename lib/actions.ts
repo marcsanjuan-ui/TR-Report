@@ -25,6 +25,7 @@ export async function createDocument(params: {
   formData: Record<string, unknown>
   photos: unknown[]
   creatorName?: string
+  status?: 'draft' | 'submitted'
 }) {
   const supabase = await createClient()
 
@@ -40,7 +41,7 @@ export async function createDocument(params: {
       form_data: params.formData,
       photos: params.photos,
       created_by: String(params.creatorName ?? 'Unknown').slice(0, 100),
-      status: 'draft',
+      status: params.status ?? 'draft',
     })
     .select()
     .single()

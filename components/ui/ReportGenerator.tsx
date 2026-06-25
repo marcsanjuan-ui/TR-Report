@@ -38,7 +38,7 @@ export default function ReportGenerator({ doc }: { doc: Document }) {
         throw new Error(data.error ?? `Server error ${res.status}`)
       }
 
-      // Stream the response token-by-token from the readable body
+      // Stream plain-text tokens from the API
       const reader = res.body?.getReader()
       if (!reader) throw new Error('No response body')
 
@@ -46,25 +46,17 @@ export default function ReportGenerator({ doc }: { doc: Document }) {
       setStreaming(true)
 
       const decoder = new TextDecoder()
-      let buffer = ''
+      let accumulated = ''
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
-        buffer += decoder.decode(value, { stream: true })
-
-        // The API returns a single JSON object — accumulate and parse when complete
-        try {
-          const parsed = JSON.parse(buffer)
-          if (parsed.error) throw new Error(parsed.error)
-          const text = (parsed.report as string)
-            .replace(/₱/g, 'PHP ')
-            .replace(/\$/g, 'PHP ')
-          setReport(text)
-          buffer = ''
-        } catch {
-          // Partial JSON — keep accumulating
-        }
+        const chunk = decoder.decode(value, { stream: true })
+        accumulated += chunk
+        setReport(accumulated
+          .replace(/₱/g, 'PHP ')
+          .replace(/\$/g, 'PHP ')
+        )
       }
 
     } catch (e: unknown) {

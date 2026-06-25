@@ -184,7 +184,7 @@ ${JSON.stringify(doc.form_data, null, 2)}${photoContext}`
       body: JSON.stringify({
         model: OLLAMA_MODEL,
         prompt,
-        stream: false,
+        stream: true,
       }),
     })
 
@@ -195,8 +195,55 @@ ${JSON.stringify(doc.form_data, null, 2)}${photoContext}`
       throw new Error(`Ollama returned ${response.status}${text ? `: ${text}` : ''}`)
     }
 
-    const data = await response.json()
-    return NextResponse.json({ report: data.response })
+    // Stream Ollama's NDJSON token-by-token to the client as plain text
+    const encoder = new TextEncoder()
+    const stream = new ReadableStream({
+      async start(streamController) {
+        const reader = response.body?.getReader()
+        if (!reader) {
+          streamController.close()
+          return
+        }
+        const decoder = new TextDecoder()
+        let buffer = ''
+        try {
+          while (true) {
+            const { done, value } = await reader.read()
+            if (done) break
+            buffer += decoder.decode(value, { stream: true })
+            const lines = buffer.split('\n')
+            buffer = lines.pop() ?? ''
+            for (const line of lines) {
+              if (!line.trim()) continue
+              try {
+                const json = JSON.parse(line)
+                if (json.response) {
+                  streamController.enqueue(encoder.encode(json.response))
+                }
+                if (json.done) {
+                  streamController.close()
+                  return
+                }
+              } catch {
+                // skip malformed line
+              }
+            }
+          }
+        } catch {
+          // stream ended or aborted
+        } finally {
+          streamController.close()
+        }
+      },
+    })
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/plain; charset=utf-8',
+        'Transfer-Encoding': 'chunked',
+        'X-Content-Type-Options': 'nosniff',
+      },
+    })
 
   } catch (err: unknown) {
     clearTimeout(timer)

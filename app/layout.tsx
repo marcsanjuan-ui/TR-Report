@@ -4,6 +4,7 @@ import { IBM_Plex_Sans, IBM_Plex_Mono } from 'next/font/google'
 import './globals.css'
 import ThemeProvider from '@/components/layout/ThemeProvider'
 import NameGuard from '@/components/layout/NameGuard'
+import SidebarWrapper from '@/components/layout/SidebarWrapper'
 
 const ibmSans = IBM_Plex_Sans({
   variable: '--font-sans',
@@ -28,7 +29,9 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
       <body className="min-h-full antialiased">
         <ThemeProvider>
           <NameGuard>
-            {children}
+            <SidebarWrapper>
+              {children}
+            </SidebarWrapper>
           </NameGuard>
         </ThemeProvider>
       </body>

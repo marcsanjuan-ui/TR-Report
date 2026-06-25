@@ -10,7 +10,7 @@ export default function TrpContainTable({ rows, onChange }: { rows: unknown[]; o
   const [local, setLocal] = useState<ContainRow[]>(
     rows.length > 0 ? rows as ContainRow[] : [newRow(), newRow(), newRow()]
   )
-  useEffect(() => { onChange(local) }, [local])
+  useEffect(() => { onChange(local) }, [local, onChange])
 
   const update = (i: number, field: keyof ContainRow, val: string) =>
     setLocal(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: val } : r))

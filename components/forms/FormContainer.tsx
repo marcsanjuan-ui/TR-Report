@@ -70,12 +70,8 @@ export default function FormContainer({ type }: Props) {
         formData,
         photos,
         creatorName,
+        status,
       })
-
-      // Update status if submitting
-      if (status === 'submitted') {
-        // Could call updateDocument here
-      }
 
       localStorage.removeItem(`draft_${type}`)
       router.push(`/documents/${doc.id}`)

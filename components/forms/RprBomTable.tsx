@@ -8,7 +8,7 @@ const newRow = (): RprRow => ({ id: Math.random().toString(36).slice(2), part: '
 
 export default function RprBomTable({ rows, onChange }: { rows: unknown[]; onChange: (r: unknown[]) => void }) {
   const [local, setLocal] = useState<RprRow[]>(rows.length > 0 ? rows as RprRow[] : [newRow()])
-  useEffect(() => { onChange(local) }, [local])
+  useEffect(() => { onChange(local) }, [local, onChange])
 
   const update = (i: number, field: keyof RprRow, val: unknown) =>
     setLocal(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: val } : r))

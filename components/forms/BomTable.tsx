@@ -23,8 +23,8 @@ export default function BomTable({ id, rows, onChange, addonRows, onAddonChange 
   const [localRows, setLocalRows] = useState<BomRow[]>(rows.length > 0 ? rows : [newBomRow()])
   const [localAddons, setLocalAddons] = useState<AddonRow[]>(addonRows.length > 0 ? addonRows : [])
 
-  useEffect(() => { onChange(localRows) }, [localRows])
-  useEffect(() => { onAddonChange(localAddons) }, [localAddons])
+  useEffect(() => { onChange(localRows) }, [localRows, onChange])
+  useEffect(() => { onAddonChange(localAddons) }, [localAddons, onAddonChange])
 
   const updateRow = (i: number, field: keyof BomRow, value: unknown) => {
     setLocalRows(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: value } : r))

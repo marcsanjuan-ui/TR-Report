@@ -4,7 +4,7 @@ import { notFound } from 'next/navigation'
 import { DOC_META } from '@/types/documents'
 import { formatDateTime } from '@/lib/utils'
 import Link from 'next/link'
-import { ArrowLeft, Calendar, Hash } from 'lucide-react'
+import { ArrowLeft, Calendar, Hash, Pencil } from 'lucide-react'
 import StatusChanger from '@/components/ui/StatusChanger'
 import ReportGenerator from '@/components/ui/ReportGenerator'
 
@@ -64,8 +64,15 @@ export default async function DocumentDetailPage({ params }: Props) {
             </div>
           </div>
 
-          {/* Status changer */}
-          <div className="flex-shrink-0">
+          {/* Actions */}
+          <div className="flex-shrink-0 flex items-center gap-2">
+            <Link
+              href={`/documents/${doc.id}/edit`}
+              className="btn-outline flex items-center gap-1.5"
+              style={{ fontSize: 12, padding: '6px 12px' }}
+            >
+              <Pencil size={12} /> Edit
+            </Link>
             <StatusChanger docId={doc.id} currentStatus={doc.status} />
           </div>
         </div>

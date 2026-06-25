@@ -18,20 +18,27 @@ export default function PhotoUpload({ ctx, photos, onPhotosChange }: Props) {
 
   function handleFiles(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? [])
-    files.forEach(f => {
-      const reader = new FileReader()
-      reader.onload = ev => {
-        const newPhoto: Photo = {
-          id: 'ph' + Date.now() + Math.random().toString(36).slice(2, 5),
-          dataUrl: ev.target?.result as string,
-          name: f.name,
-          caption: '',
-          ctx,
+    const MAX_SIZE_MB = 2
+    const oversized = files.filter(f => f.size > MAX_SIZE_MB * 1024 * 1024)
+    if (oversized.length > 0) {
+      alert(`${oversized.map(f => f.name).join(', ')} exceed${oversized.length === 1 ? 's' : ''} the ${MAX_SIZE_MB}MB limit and will be skipped. Keep attachments small — they are stored as base64 in the database.`)
+    }
+    files
+      .filter(f => f.size <= MAX_SIZE_MB * 1024 * 1024)
+      .forEach(f => {
+        const reader = new FileReader()
+        reader.onload = ev => {
+          const newPhoto: Photo = {
+            id: 'ph' + Date.now() + Math.random().toString(36).slice(2, 5),
+            dataUrl: ev.target?.result as string,
+            name: f.name,
+            caption: '',
+            ctx,
+          }
+          onPhotosChange([...all, newPhoto])
         }
-        onPhotosChange([...all, newPhoto])
-      }
-      reader.readAsDataURL(f)
-    })
+        reader.readAsDataURL(f)
+      })
     e.target.value = ''
   }
 
@@ -57,7 +64,7 @@ export default function PhotoUpload({ ctx, photos, onPhotosChange }: Props) {
         <input ref={inputRef} type="file" accept="image/*,.pdf" multiple className="hidden" onChange={handleFiles} />
         <div className="text-2xl mb-2 opacity-50">📁</div>
         <p className="text-xs font-semibold text-blue-700">Drop photos or PDFs here, or click to browse</p>
-        <p className="text-[10px] text-gray-400 mt-1">JPG · PNG · WEBP · PDF — Multiple files supported</p>
+        <p className="text-[10px] text-gray-400 mt-1">JPG · PNG · WEBP · PDF — Multiple files supported · Max 2MB each</p>
       </div>
 
       {/* Photo grid */}

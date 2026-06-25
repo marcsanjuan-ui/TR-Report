@@ -10,7 +10,7 @@ const UNITS = ['pcs', 'kg', 'm', 'L', 'set', 'lot']
 
 export default function PsmBomTable({ rows, onChange }: { rows: unknown[]; onChange: (r: unknown[]) => void }) {
   const [local, setLocal] = useState<PsmRow[]>(rows.length > 0 ? rows as PsmRow[] : [newRow()])
-  useEffect(() => { onChange(local) }, [local])
+  useEffect(() => { onChange(local) }, [local, onChange])
 
   const update = (i: number, field: keyof PsmRow, val: unknown) =>
     setLocal(prev => prev.map((r, idx) => idx === i ? { ...r, [field]: val } : r))
